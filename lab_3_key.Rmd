@@ -10,8 +10,11 @@ knitr::opts_chunk$set(echo = TRUE,
                       message = FALSE, 
                       warning = FALSE)
 library(tidyverse)
-library(sf)
 library(janitor)
+library(here)
+library(sf)
+library(tmap)
+
 ```
 
 # PART 1. Binary Logistic Regression
@@ -152,3 +155,78 @@ Some questions to think about:
 - Do these align with what we'd expect from our data visualization?
 
 # PART 2. (Re)introduction to visualizing spatial data
+
+The `cougar_connections` folder contains spatial data for mountain lion connectivity in the Sierra Nevada foothills. From the researchers: "The least-cost corridors identify the best swath of habitat available for focal species to move from one landscape block to another based on predicted suitable habitat as identified by the northern Sierra Nevada foothills wildlife connectivity project."
+
+**Citation:** Beier, P., D. R. Majka, and J. S. Jenness. 2007. Conceptual steps for designing wildlife corridors.
+
+Link to project report: https://nrm.dfg.ca.gov/FileHandler.ashx?DocumentID=85358
+
+### Step 1. Read in the data!
+
+Use `sf::read_sf()` to read in the spatial data together!
+```{r}
+cougars <- read_sf(dsn = here("cougar_connections"), layer = "ds1014") %>%
+  clean_names()
+```
+
+Notice that the last column is "geometries" - that contains the *sticky* spatial data - meaning that we can wrangle & work with our data just like we've done before, but the spatial information will stick to it! 
+
+### STEP 2: Practice some spatial wrangling with sticky geometries
+
+For example: Let's say we're only interested in really large corridors with areas greater than 24,000 acres. We can filter the dataset normally, and only keep that attribute...but the geometry will stick to it! 
+
+```{r}
+# Use wrangling functions as usual (+ pipe, etc!)
+large_corridors <- cougars %>% 
+  filter(area_ac > 20000) %>% 
+  select(area_ac)
+
+# Look at 'large_corridors' data frame and see that the geometries column still appears, even though we didn't explicitly select it. Cool sf magic! 
+
+# We can even use the base plot() function to see what's happening (careful of doing this if we have multiple attributes):
+plot(large_corridors)
+```
+
+Let's create a different subset from the original data that contains the following variables:
+
+- elev_mean (mean elevation)
+- ecoregs (eco-regions)
+- pc_urban (percent urban area in polygon)
+
+```{r}
+cougar_sub <- cougars %>% 
+  select(elev_mean, ecoregs, pc_urban)
+```
+
+### STEP 3. Visualizing spatial polygons with `geom_sf`
+```{r}
+
+ggplot(data = cougar_sub) +
+  geom_sf(aes(fill = elev_mean), color = NA)
+
+```
+
+### STEP 4. Actually give it some context & interactivity! 
+
+We can use `tmap` to make a static or interactive plot over an existing basemap.
+```{r}
+# This will make a stationary (non-interactive) plot
+tmap_mode("plot") # switch to "view" to make interactive! 
+
+# 
+tm_shape(cougar_sub) +
+  tm_fill("elev_mean")
+```
+
+OK maybe not the most inspiring thing, but it works...now let's change the view mode: 
+```{r}
+tmap_mode("view") # Set to interactive viewing
+tm_shape(cougar_sub) +
+  tm_fill("elev_mean") +
+  tm_basemap("Stamen.Terrain")
+```
+
+See http://leaflet-extras.github.io/leaflet-providers/preview for a preview of basemaps you can add with `tm_basemap`!
+
+Try out some different basemaps and test interactivity, and see that it's maintained when you knit! 
