@@ -1,0 +1,154 @@
+---
+title: "ESM 244 Lab 3"
+author: "Allison Horst"
+date: "1/22/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, 
+                      message = FALSE, 
+                      warning = FALSE)
+library(tidyverse)
+library(sf)
+library(janitor)
+```
+
+# PART 1. Binary Logistic Regression
+
+### a. Read in & combine the penguin data
+
+```{r}
+gentoo <- read_csv("gentoo_lter.csv")
+chinstrap <- read_csv("chinstrap_lter.csv")
+
+# Use full_join() to merge them together (keeping everything)
+penguins <- full_join(chinstrap, gentoo) %>% 
+  clean_names() %>% 
+  mutate(sex = str_to_lower(sex)) %>% 
+  filter(sex %in% c("male","female"))
+
+```
+
+
+### b. We should always look at our data first. What do we notice?
+
+```{r}
+ggplot(penguins, aes(x = sex, y = body_mass_g)) +
+  geom_jitter(size = 1, 
+              alpha = 0.5,
+              aes(color = sex,
+                  pch = sex)) +
+  facet_wrap(~species) +
+  scale_color_manual(values = c("blue","orange"))
+```
+
+Does it look like, if we knew the sex and body mass of a penguin, we might be able to make some "reasonable" estimate (by probability) of it being an Chinstrap vs. Gentoo? Discuss.
+
+### c. Binomial logistic regression
+
+Use the 'glm' function for fitting *generalized linear models*. Here, we'll try to find the probability of a binary outcome (probability that a penguin is either an Adelie or a Gentoo) based on penguin sex and body mass.
+
+**Reminder:** our equation is written with the log odds (the *logit*) of being an **Adelie** penguin (Adelie = 1) related to a linear combination of coefficients multiplying our two variables (sex and body mass):
+
+$$Log Odds (Chinstrap) = \beta_0 + \beta_1(Sex) + \beta_2(BodyMass)$$
+
+We will use 'family = binomial' to run binomial logistic regression...otherwise, this looks very similar to other types of regression we've already done.
+
+A cool resource (goes deeper into training, testing, etc.): http://r-statistics.co/Logistic-Regression-With-R.html
+
+
+```{r}
+# First, I am going to manually set an outcome as 0/1
+
+penguin_bin <- penguins %>% 
+  mutate(sp_binary = case_when(
+    species == "Chinstrap penguin (Pygoscelis antarctica)" ~ 1,
+    species == "Gentoo penguin (Pygoscelis papua)" ~ 0
+  ))
+
+penguin_blr <- glm(sp_binary ~ sex + body_mass_g, family = binomial, data = penguin_bin)
+
+penguin_blr
+summary(penguin_blr)
+```
+
+Hmmm what do these mean? Let's do some predictions.
+
+See `?predict.glm()` for important information about the `type = ` argument!
+
+1. What is the probability that a penguin is a Chinstrap if it weighs 4500 grams and is male? 
+
+```{r}
+# Create a data frame with variables `sex` and `body_mass_g`:
+
+df_m4500 <- data.frame(sex = "male", body_mass_g = 4500)
+
+# Find LOG ODDS of being a Chinstrap using predict + type = "link" (the link is log-odds)
+m4500_logodds <- predict(penguin_blr, newdata = df_m4500, type = "link")
+
+# Find the actual probability using type = "response":
+m4500_prob <- predict(penguin_blr, newdata = df_m4500, type = "response")
+m4500_prob # A 98% chance that a male penguin weighing 4500 g is a chinstrap!
+```
+
+2. What is the probability that a penguin is a Chinstrap if it weights 4000 grams and is female? 
+
+```{r}
+# Create a data frame with variables `sex` and `body_mass_g`:
+
+df_f4000 <- data.frame(sex = "female", body_mass_g = 4000)
+
+# Find LOG ODDS of being a Chinstrap using predict + type = "link" (the link is log-odds)
+f4000_logodds <- predict(penguin_blr, newdata = df_f4000, type = "link")
+
+# Find the actual probability using type = "response":
+f4500_prob <- predict(penguin_blr, newdata = df_f4000, type = "response")
+f4500_prob
+```
+
+d. Predictions over a whole spectrum of body masses for penguins: 
+
+First we'll make a data frame containing a range of body masses for male / female, then use that to make a bunch of predictions at the same time: 
+```{r}
+penguins_mock <- data.frame(
+  body_mass_g = rep(seq(3000, 6000, length = 200), 2),
+  sex = c(rep("male", 200), rep("female", 200))
+)
+
+# Check out penguins_mock to see what our new data frame looks like
+```
+
+Now, feed that new "mock" data into the model to make predictions for every combination, then make a graph:
+
+```{r}
+
+# Get the predicted probabilitys of a chinstrap penguin (+ SEs)
+full_predict <- predict(penguin_blr, newdata = penguins_mock, type = "response", se.fit = TRUE) 
+
+# Coerce predictions into a data frame, with the mock data + SEs:
+final_df <- data.frame(penguins_mock, 
+                       full_predict$fit, 
+                       full_predict$se.fit)
+
+colnames(final_df) <- c("penguin_mass", "sex", "probability", "se")
+
+# Check out final_df
+# Then plot!
+
+ggplot(data = final_df, aes(x = penguin_mass, y = probability)) +
+  geom_line(aes(color = sex)) +
+  scale_x_continuous(limits = c(3500, 5500)) +
+  geom_ribbon(aes(ymin = probability - se, ymax = probability + se, fill = sex), alpha = 0.3) +
+  labs(x = "Penguin body mass (g)",
+       y = "Probability of being Chinstrap") +
+  theme_minimal()
+```
+
+Some questions to think about: 
+
+- What are some assumptions we've made? 
+- What are the limitations? 
+- Do these align with what we'd expect from our data visualization?
+
+# PART 2. (Re)introduction to visualizing spatial data
