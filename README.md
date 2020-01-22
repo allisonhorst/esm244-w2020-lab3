@@ -1,2 +1,4 @@
-# esm-244-w2020-lab-3
-binary logistic regression, (re)-introduction to spatial data with `sf`
+# ESM 244 (Winter 2020) Lab 3
+
+- Binary logistic regression
+- (Re)-introduction to spatial data with sf
